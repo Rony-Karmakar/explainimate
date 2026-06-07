@@ -1,0 +1,10 @@
+services:
+  manim:
+    image: manimcommunity/manim
+    volumes:
+      - ./scenes:/manim # Everything inside local ./scenes appears in container /manim
+      - ./output:/output # Everything inside container /output appears in local ./output
+    working_dir: /manim
+    tty: true
+    stdin_open: true
+    user: root # Crucial for Linux/Mac production servers to avoid write-permission errors

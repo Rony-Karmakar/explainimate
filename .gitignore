@@ -1,0 +1,13 @@
+# VS Code
+.vscode/
+
+# Python
+backend/.venv/
+backend/__pycache__/
+
+# Generated files
+backend/output/
+backend/scenes/
+
+# Environment variables
+backend/.env
