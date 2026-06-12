@@ -13,8 +13,57 @@ client = OpenAI(
     base_url=base_url
 )
 
-def generate_Manim_Code(plan: str):
-    CODE_SYSTEM_PROMPT = """
+# Define your tools properly
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_Manim_Code",
+            "description": "Generates Manim animation code from a detailed plan",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "plan": {
+                        "type": "string",
+                        "description": "Detailed scene by scene animation plan"
+                    }
+                },
+                "required": ["plan"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_Code_File",
+            "description": "Saves generated Manim code to a Python file",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Manim Python code to save"
+                    }
+                },
+                "required": ["code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_Code",
+            "description": "Executes the Manim file inside Docker and renders the video",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    }
+]
+
+CODE_SYSTEM_PROMPT = """
         You are an expert Manim v0.18 Python code writer.
         You will receive a detailed animation plan from a 
         planning agent. Your ONLY job is to convert that 
@@ -60,6 +109,31 @@ def generate_Manim_Code(plan: str):
         - Use ReplacementTransform() to evolve shapes smoothly
         - Add self.wait(1.5) after every key concept
         - Keep main title persistent at top using .to_edge(UP)
+
+        ## VALID MANIM COLOR CONSTANTS ONLY
+        Use ONLY these colors by name:
+        WHITE, BLACK, GRAY, GREY,
+        RED, BLUE, GREEN, YELLOW, ORANGE, PURPLE, PINK,
+        GOLD, TEAL, MAROON,
+        DARK_BLUE, DARK_BROWN, DARK_GRAY, DARK_GREY,
+        DARK_GREEN, DARK_RED,
+        LIGHT_GRAY, LIGHT_GREY, LIGHT_BROWN,
+        BLUE_A, BLUE_B, BLUE_C, BLUE_D, BLUE_E,
+        RED_A, RED_B, RED_C, RED_D, RED_E,
+        GREEN_A, GREEN_B, GREEN_C, GREEN_D, GREEN_E,
+        GOLD_A, GOLD_B, GOLD_C, GOLD_D, GOLD_E,
+        TEAL_A, TEAL_B, TEAL_C, TEAL_D, TEAL_E
+
+        INVALID COLORS — NEVER USE:
+        BROWN        → use DARK_BROWN or "#8B4513"
+        LIGHT_BROWN  → use "#D2B48C"
+        CYAN         → use TEAL or "#00FFFF"
+        MAGENTA      → use "#FF00FF"
+        INDIGO       → use "#4B0082"
+        VIOLET       → use PURPLE or "#EE82EE"
+
+        FOR ANY COLOR NOT IN THE LIST ABOVE:
+        Use hex value instead e.g. color="#8B4513"
 
         ## ARRAY AND SORTING ALGORITHM RULES (CRITICAL)
         - Create ALL boxes and numbers ONCE at the start
@@ -150,6 +224,8 @@ def generate_Manim_Code(plan: str):
                 self.play(FadeOut(scene2_group))
     """
 
+def generate_Manim_Code(plan: str):
+
     response = client.chat.completions.create(
         model="zai-glm-4.7",
         messages=[
@@ -160,59 +236,73 @@ def generate_Manim_Code(plan: str):
                 "role": "user", "content": plan
             }
         ],
-
     )
 
     return response.choices[0].message.content
 
 def create_Code_File(code, session_id):
-    # Keep this exactly as you wrote it. It writes locally to your host's scenes folder.
-    os.makedirs("scenes", exist_ok=True)
-    filename = f"scenes/scene_{session_id}.py"
-
-    with open(filename, "w", encoding="utf-8") as file:
-        file.write(code)
-
-    return filename
-
-import subprocess
-import os
+    try:
+        os.makedirs("scenes", exist_ok=True)
+        filename = f"scenes/scene_{session_id}.py"
+        with open(filename, "w", encoding="utf-8") as file:
+            file.write(code)
+        return f"{filename} created successfully"
+    except Exception as e:
+        return f"File creation failed: {str(e)}"
 
 def execute_Code(session_id, scene_class="GeneratedScene"):
-    # Ensure we are mapping inside the backend folder context
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    os.makedirs("output", exist_ok=True)
-    result = subprocess.run([
-        "docker", "compose", "exec", "-T", "manim",
-        "manim", "-qm",
-        f"/manim/scene_{session_id}.py",
-        scene_class,
-        "--media_dir", "/output"  # <--- FIX: Corrected back to standard Manim flag
-    ],
-    capture_output=True,
-    text=True,
-    cwd=backend_dir,
-    encoding="utf-8"
-    )
-    
-    if result.returncode == 0:
-        # Manim paths nested with standard --media_dir logic:
-        # output/videos/scene_{session_id}/720p30/{scene_class}.mp4
-        video_path = os.path.join(
-            backend_dir, "output", "videos", f"scene_{session_id}", "720p30", f"{scene_class}.mp4"
+    try:
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        os.makedirs("output", exist_ok=True)
+        result = subprocess.run([
+            "docker", "compose", "exec", "-T", "manim",
+            "manim", "-qm",
+            f"/manim/scene_{session_id}.py",
+            scene_class,
+            "--media_dir", "/output"
+        ],
+        capture_output=True,
+        text=True,
+        cwd=backend_dir,
+        encoding="utf-8",
+        timeout=120
         )
-        
-        if os.path.exists(video_path):
-            return video_path
-        else:
-            return f"Error: Render succeeded but file missing at expected path: {video_path}"
-    else:
-        return f"Error: {result.stderr}"
 
-def get_available_tools():
-    
-    return {
-        'generate_Manim_Code': generate_Manim_Code,
-        'create_Code_File': create_Code_File,
-        'execute_Code': execute_Code
-    }
+        if result.returncode == 0:
+            video_path = os.path.join(
+                backend_dir, "output", "videos",
+                f"scene_{session_id}", "720p30",
+                f"{scene_class}.mp4"
+            )
+            if os.path.exists(video_path):
+                return video_path
+            else:
+                return f"Error: File missing at {video_path}"
+        else:
+            return f"Error: {result.stderr}"
+    except Exception as e:
+        return f"Execution failed: {str(e)}"
+
+def refine_Manim_Code(existing_code: str, feedback: str) -> str:
+    response = client.chat.completions.create(
+        model="zai-glm-4.7",
+        messages=[
+            {"role": "system", "content": CODE_SYSTEM_PROMPT},
+            {"role": "user", "content": f"""
+                Here is the existing Manim code:
+                {existing_code}
+
+                User wants these changes:
+                {feedback}
+
+                Rules:
+                - Keep everything the user did NOT mention
+                - Only change what the user specifically asked for
+                - Return the complete modified code
+                """}
+                        ]
+    )
+
+    if response.choices[0].message.content: ans = response.choices[0].message.content
+
+    return ans
