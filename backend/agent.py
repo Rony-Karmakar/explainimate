@@ -117,6 +117,12 @@ def run_agent_loop(message_history, session_id, tools):
                     result = execute_Code(session_id, scene_class)
 
                     if not result.startswith("Error:"):
+                        sessions[session_id]["versions"].append({
+                        "version": 0,
+                        "feedback": "Original generation",
+                        "video_path": result,
+                        "code": sessions[session_id]["generated_code"]
+                    })
                         print(f"✅ Success on attempt {attempt}")
                         break
 
@@ -159,6 +165,11 @@ def run_feedback_round(session_id, feedback):
 
     # Step 1 — Directly generate refined code
     # No tool calling needed here — just call function directly
+    sessions[session_id]["version"] += 1
+    version = sessions[session_id]["version"]
+    versioned_id = f"{session_id}_v{version}"
+    print(f"📝 Creating version {version}")
+
     refined_code = generate_Manim_Code(
         f"""
 Previous working code:
@@ -178,11 +189,11 @@ Instructions:
     # Step 2 — Update session with new code
     sessions[session_id]["generated_code"] = refined_code
 
-    # Step 3 — Overwrite SAME file with same session_id
-    create_Code_File(refined_code, session_id)
-    print(f"✅ File updated for session {session_id}")
+    # Step 3 — Save with versioned filename
+    create_Code_File(refined_code, versioned_id)
+    print(f"✅ File created: scene_{versioned_id}.py")
 
-    # Step 4 — Execute same file with retry loop
+    # Step 4 — Execute with retry loop
     max_retries = 3
     attempt = 0
     result = None
@@ -194,7 +205,7 @@ Instructions:
         scene_class = extract_scene_class(
             sessions[session_id]["generated_code"]
         )
-        result = execute_Code(session_id, scene_class)
+        result = execute_Code(versioned_id, scene_class)
 
         if not result.startswith("Error:"):
             print(f"✅ Success on attempt {attempt}")
@@ -206,7 +217,6 @@ Instructions:
             print("❌ All 3 attempts failed")
             break
 
-        # Fix error
         fixed_code = generate_Manim_Code(
             f"""
 Error: {result}
@@ -215,9 +225,19 @@ Fix ONLY the error. Return complete corrected code.
 """
         )
         sessions[session_id]["generated_code"] = fixed_code
-        create_Code_File(fixed_code, session_id)
+        create_Code_File(fixed_code, versioned_id)
 
+    # Step 5 — Update video path
     sessions[session_id]["video_path"] = result
+
+    # Step 6 — Store version history
+    sessions[session_id]["versions"].append({
+        "version": version,
+        "feedback": feedback,
+        "video_path": result,
+        "code": refined_code
+    })
+
     return result
 
 
@@ -225,10 +245,10 @@ def run_agent():
     session_id = str(uuid.uuid4())[:8]
     sessions[session_id] = {
         "generated_code": None,
-        "messages": [],
         "video_path": None,
         "plan": None,
-        "version": 0
+        "version": 0,
+        "versions": []
     }
 
     message_history = [
