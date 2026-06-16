@@ -154,7 +154,7 @@ def run_agent_loop(message_history, session_id, tools):
 
             if tool_name == "execute_Code":
                 print(f"🎬 Video: {sessions[session_id]['video_path']}")
-                break
+                return {sessions[session_id]['video_path']}
 
         if "execute_Code" in tools_called:
             break
@@ -241,7 +241,7 @@ Fix ONLY the error. Return complete corrected code.
     return result
 
 
-def run_agent():
+def run_agent(user_query: str):
     session_id = str(uuid.uuid4())[:8]
     sessions[session_id] = {
         "generated_code": None,
@@ -255,25 +255,24 @@ def run_agent():
         {"role": "system", "content": SYSTEM_PROMPT},
     ]
 
-    user_query = input("Generate a video: ")
     message_history.append({"role": "user", "content": user_query})
 
     # First generation — full agent loop
-    run_agent_loop(message_history, session_id, tools)
+    video_path = run_agent_loop(message_history, session_id, tools)
 
-    # Feedback loop
-    while True:
-        print(f"\n📽️  Video: {sessions[session_id]['video_path']}")
-        feedback = input(
-            "\nSatisfied? (yes to exit / type feedback): "
-        ).strip()
+    return video_path
 
-        if feedback.lower() in ["yes", "y", ""]:
-            print("🎉 Enjoy your video!")
-            break
+    # # Feedback loop
+    # while True:
+    #     print(f"\n📽️  Video: {sessions[session_id]['video_path']}")
+    #     feedback = input(
+    #         "\nSatisfied? (yes to exit / type feedback): "
+    #     ).strip()
 
-        # Feedback round — bypass agent loop entirely
-        # Directly refine and re-execute same file
-        run_feedback_round(session_id, feedback)
+    #     if feedback.lower() in ["yes", "y", ""]:
+    #         print("🎉 Enjoy your video!")
+    #         return video_path
 
-run_agent()
+    #     # Feedback round — bypass agent loop entirely
+    #     # Directly refine and re-execute same file
+    #     run_feedback_round(session_id, feedback)

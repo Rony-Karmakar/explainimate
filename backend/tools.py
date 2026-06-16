@@ -264,8 +264,7 @@ def execute_Code(session_id, scene_class="GeneratedScene"):
         capture_output=True,
         text=True,
         cwd=backend_dir,
-        encoding="utf-8",
-        timeout=120
+        encoding="utf-8"
         )
 
         if result.returncode == 0:
