@@ -8,3 +8,9 @@ services:
     tty: true
     stdin_open: true
     user: root # Crucial for Linux/Mac production servers to avoid write-permission errors
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
