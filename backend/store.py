@@ -1,6 +1,37 @@
 import redis
 import json
 import os
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+url = os.getenv("DATABASE_URL")
+
+if not url:
+    raise ValueError("DATABASE_URL is not set in .env")
+
+engine = create_engine(url)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+class VideoHistory(Base):
+    __tablename__ = "video_history"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String, index=True)
+    version = Column(Integer)
+    prompt = Column(Text)
+    feedback = Column(Text, nullable=True)
+    video_path = Column(String)
+    code = Column(Text)
+    created_at = Column(DateTime, default=datetime.time)
+
+Base.metadata.create_all(engine)
 
 r = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
